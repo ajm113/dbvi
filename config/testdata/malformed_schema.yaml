@@ -1,0 +1,6 @@
+connections:
+  - name: Test
+    type: postgres
+    host: localhost
+use_connection: "test"
+invalid_field: true
