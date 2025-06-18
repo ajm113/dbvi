@@ -12,6 +12,8 @@ const (
 	MaskComment = "MASKED BY DBVI"
 )
 
+// Loads config yaml file that will iterate over all "password" or "secret" or "token*"
+// THIS DOES NOT SAVE THE UNMASKED PASSWORD. SHOULD ONLY BE RAN AFTER PASSWORDS/SECRETS ARE ENCRYPTED OR SAVED SOMEWHERE!
 func MaskPasswords(path, outPath string) error {
 	if outPath == "" {
 		outPath = path
@@ -46,7 +48,7 @@ func MaskPasswords(path, outPath string) error {
 	return nil
 }
 
-// maskSensitiveFields recursively traverses and masks fields named "password", "secret", etc.
+// maskSensitiveFields recursively traverses and masks values with fields named "password", "secret", or keys containing the word "token".
 func maskSensitiveFields(node *yaml.Node) {
 	if node.Kind == yaml.MappingNode {
 		for i := 0; i < len(node.Content); i += 2 {
