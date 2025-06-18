@@ -68,9 +68,12 @@ func Load(path string) (*Config, error) {
 
 func FindDefault() (string, error) {
 	home, _ := os.UserHomeDir()
+	cwd, _ := os.Getwd()
+	config, _ := getConfigDir()
+
 	paths := []string{
-		os.Getwd(),
-		filepath.Join(getConfigDir(), "dbvi"),
+		cwd,
+		filepath.Join(config, "dbvi"),
 		home,
 		filepath.Join(home, "dbvi"),
 	}
