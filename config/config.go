@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,6 +10,12 @@ import (
 )
 
 type Config struct {
+	Connections          []Connection
+	UseConnection        string
+	HasUnmaskedPasswords bool
+}
+
+type config struct {
 	Connections   []Connection `yaml:"connections"`
 	UseConnection string       `yaml:"use_connection"`
 }
@@ -22,29 +29,36 @@ func Load(path string) (*Config, error) {
 	// check for any YAML syntax errors.
 	var node yaml.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
-		fmt.Println("YAML syntax error:", err)
 		return nil, err
 	}
 
 	// we want strict decoding to make yaml mistakes clear
 	// so the user doesn't have to guess why things aren't working.
-	cfg := &Config{}
+	cfg := &config{}
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true) // THIS causes unknown fields to raise errors
 
 	if err := dec.Decode(&cfg); err != nil {
-		fmt.Printf("Validation error: %v\n", err)
 		return nil, err
 	}
 
+	hasUnmaskedPasswords := false
 	// Do in-depth validation of the config.
 	for i, c := range cfg.Connections {
 		err := validateConnection(c)
 
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrPasswordUnmasked) {
 			return nil, fmt.Errorf("error at connections[%d]: %w", i, err)
+		}
+
+		if errors.Is(err, ErrPasswordUnmasked) {
+			hasUnmaskedPasswords = true
 		}
 	}
 
-	return cfg, nil
+	return &Config{
+		Connections:          cfg.Connections,
+		UseConnection:        cfg.UseConnection,
+		HasUnmaskedPasswords: hasUnmaskedPasswords,
+	}, nil
 }

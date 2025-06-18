@@ -34,6 +34,10 @@ func validateConnection(c Connection) error {
 		return &ConnectionValidationError{Field: "host", Desc: "missing field"}
 	}
 
+	if !isFieldMasked(c.Password) {
+		return ErrPasswordUnmasked
+	}
+
 	// TODO: Do more validation here based on the type provided.
 	return nil
 }

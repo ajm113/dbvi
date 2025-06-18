@@ -7,13 +7,16 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
-		file string
-		c    *Config
-		err  error
+		file          string
+		c             *Config
+		err           error
+		wantTypeError bool
 	}{
 		{
 			file: "blank.yaml",
@@ -21,14 +24,29 @@ func TestLoad(t *testing.T) {
 			err:  io.EOF,
 		},
 		{
-			file: "malformed_schema.yaml",
-			c:    nil,
-			err:  io.EOF,
+			file:          "malformed_schema.yaml",
+			c:             nil,
+			wantTypeError: true,
 		},
 		{
 			file: "valid_connection.yaml",
-			c:    &Config{},
-			err:  nil,
+			c: &Config{
+				Connections: []Connection{
+					{
+						Name:     "Test",
+						Type:     "postgres",
+						Host:     "localhost",
+						Port:     5432,
+						Database: "postgres",
+						ReadOnly: false,
+						Username: "test",
+						Password: "test",
+					},
+				},
+				UseConnection:        "test",
+				HasUnmaskedPasswords: true,
+			},
+			err: nil,
 		},
 	}
 
@@ -47,8 +65,15 @@ func TestLoad(t *testing.T) {
 				}
 			}
 
-			if !errors.Is(err, tt.err) {
-				t.Errorf("got %+v, want %+v", err, tt.err)
+			var typeErr *yaml.TypeError
+			gotTypeError := errors.As(err, &typeErr)
+
+			if gotTypeError != tt.wantTypeError {
+				t.Errorf("expected TypeError=%v, got %v (err=%v)", tt.wantTypeError, gotTypeError, err)
+			}
+
+			if !errors.Is(err, tt.err) && !tt.wantTypeError {
+				t.Errorf("got %T, want %T", err, tt.err)
 			}
 		})
 	}

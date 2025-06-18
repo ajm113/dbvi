@@ -15,5 +15,6 @@ func (e *ConnectionValidationError) Error() string {
 }
 
 var (
-	ErrConfigNotFound = errors.New("config not found")
+	ErrConfigNotFound   = errors.New("config not found")
+	ErrPasswordUnmasked = errors.New("password unmasked")
 )
