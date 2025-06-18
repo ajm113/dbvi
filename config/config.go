@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
+
+const DefaultConfigName = "dbvi.yaml"
 
 type Config struct {
 	Connections          []Connection
@@ -61,4 +64,47 @@ func Load(path string) (*Config, error) {
 		UseConnection:        cfg.UseConnection,
 		HasUnmaskedPasswords: hasUnmaskedPasswords,
 	}, nil
+}
+
+func FindDefault() (string, error) {
+	home, _ := os.UserHomeDir()
+	paths := []string{
+		os.Getwd(),
+		filepath.Join(getConfigDir(), "dbvi"),
+		home,
+		filepath.Join(home, "dbvi"),
+	}
+
+	for _, p := range paths {
+		target := filepath.Join(p, DefaultConfigName)
+		_, err := os.Stat(target)
+
+		if err == nil {
+			return target, nil
+		}
+	}
+
+	return "", ErrConfigNotFound
+}
+
+func getConfigDir() (string, error) {
+	// Check XDG_CONFIG_HOME on Linux/macOS
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return xdg, nil
+	}
+
+	// Else, fallback to $HOME/.config on Unix systems
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	// On Windows, use %AppData%
+	if os.PathSeparator == '\\' {
+		if appdata := os.Getenv("APPDATA"); appdata != "" {
+			return appdata, nil
+		}
+	}
+
+	return filepath.Join(home, ".config"), nil
 }
