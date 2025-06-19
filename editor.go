@@ -11,18 +11,33 @@ type Editor struct {
 	InsertMode    bool
 	Width         int
 	Height        int
+	StatusBar     *StatusBar
+
+	screen tcell.Screen
 }
 
-func NewEditor() *Editor {
-	return &Editor{
+func NewEditor(screen tcell.Screen) *Editor {
+
+	editor := &Editor{
 		Lines:      []string{""},
 		CursorX:    0,
 		CursorY:    0,
 		InsertMode: false,
+		screen:     screen,
 	}
+
+	editor.StatusBar = NewStatusBar(screen, editor)
+
+	return editor
 }
 
 func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
+
+	if !e.StatusBar.StatusMode {
+		e.StatusBar.HandleEventKey(ek)
+		return
+	}
+
 	switch ek.Key() {
 	case tcell.KeyLeft:
 		e.MoveCursor(-1, 0)
@@ -45,6 +60,14 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 	switch ek.Key() {
 	case tcell.KeyRune:
 		switch ek.Rune() {
+		case ':':
+			e.StatusBar.StatusMode = false
+			e.StatusBar.Command = ":"
+			e.StatusBar.CursorX++
+		case '/':
+			e.StatusBar.StatusMode = false
+			e.StatusBar.Command = "/"
+			e.StatusBar.CursorX++
 		case 'i':
 			e.InsertMode = true
 		case 'a':
@@ -128,4 +151,26 @@ func (e *Editor) SetCursor(x, y int) {
 	if e.CursorY >= e.ScrollOffsetY+e.Height {
 		e.ScrollOffsetY = e.CursorY - e.Height + 1
 	}
+}
+
+func (e *Editor) Draw() {
+	screenWidth, screenHeight := e.screen.Size()
+
+	// We make sure the editor is aware of it's visibility
+	e.Height = screenHeight - 1 // leave space for status bar
+	e.Width = screenWidth
+
+	for y := 0; y < e.Height; y++ {
+		lineIndex := e.ScrollOffsetY + y
+		if lineIndex >= len(e.Lines) {
+			break
+		}
+
+		line := e.Lines[lineIndex]
+		for x, ch := range line {
+			e.screen.SetContent(x, y, ch, nil, tcell.StyleDefault)
+		}
+	}
+
+	e.StatusBar.Draw()
 }

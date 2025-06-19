@@ -17,9 +17,7 @@ type App struct {
 }
 
 func NewApp() *App {
-	return &App{
-		editor: NewEditor(),
-	}
+	return &App{}
 }
 
 func (a *App) Init() {
@@ -60,6 +58,8 @@ func (a *App) Init() {
 	if err != nil {
 		a.log.Fatal("unexpected error init tcell screen", zap.Any("error", err))
 	}
+
+	a.editor = NewEditor(a.screen)
 }
 
 func (a *App) Run() error {
@@ -88,26 +88,14 @@ func (a *App) Run() error {
 
 func (a *App) draw() {
 	a.screen.Clear()
+	a.editor.Draw()
 
-	screenWidth, screenHeight := a.screen.Size()
-
-	// We make sure the editor is aware of it's visibility
-	a.editor.Height = screenHeight - 1 // leave space for status bar
-	a.editor.Width = screenWidth
-
-	for y := 0; y < a.editor.Height; y++ {
-		lineIndex := a.editor.ScrollOffsetY + y
-		if lineIndex >= len(a.editor.Lines) {
-			break
-		}
-
-		line := a.editor.Lines[lineIndex]
-		for x, ch := range line {
-			a.screen.SetContent(x, y, ch, nil, tcell.StyleDefault)
-		}
+	if !a.editor.StatusBar.StatusMode {
+		a.screen.ShowCursor(a.editor.StatusBar.CursorX, a.editor.Height)
+	} else {
+		a.screen.ShowCursor(a.editor.CursorX, a.editor.CursorY-a.editor.ScrollOffsetY)
 	}
 
-	a.screen.ShowCursor(a.editor.CursorX, a.editor.CursorY-a.editor.ScrollOffsetY)
 	a.screen.Show()
 }
 
