@@ -5,12 +5,24 @@ import (
 	"os"
 
 	"github.com/ajm113/dbvi/config"
+	"github.com/gdamore/tcell"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-func main() {
+type App struct {
+	screen tcell.Screen
+	log    *zap.SugaredLogger
+	editor *Editor
+}
 
+func NewApp() *App {
+	return &App{
+		editor: NewEditor(),
+	}
+}
+
+func (a *App) Init() {
 	// TODO: Move me to a tmp dir?
 	logger, err := setupLogger("dbvi.log")
 	if err != nil {
@@ -19,26 +31,93 @@ func main() {
 	}
 
 	defer logger.Sync() // flushes buffer, if any
-	sugar := logger.Sugar()
+	a.log = logger.Sugar()
 
 	configPath, err := config.FindDefault()
 
 	// TODO: Have this not fail completely?
 	if errors.Is(err, config.ErrConfigNotFound) {
-		sugar.Fatal("config not found")
+		a.log.Fatal("config not found")
 	}
 
 	if err != nil {
-		sugar.Fatal("unexpected error finding config", zap.Any("error", err))
+		a.log.Fatal("unexpected error finding config", zap.Any("error", err))
 	}
 
-	sugar.Debugf("loading config: %s", configPath)
+	a.log.Debugf("loading config: %s", configPath)
 	_, err = config.Load(configPath)
 	if err != nil {
-		sugar.Fatal("unexpected error loading config", zap.Any("error", err))
+		a.log.Fatal("unexpected error loading config", zap.Any("error", err))
 	}
 
-	sugar.Info("loaded config")
+	a.log.Info("loaded config")
+
+	a.screen, err = tcell.NewScreen()
+	if err != nil {
+		a.log.Fatal("unexpected error creating tcell screen", zap.Any("error", err))
+	}
+	err = a.screen.Init()
+	if err != nil {
+		a.log.Fatal("unexpected error init tcell screen", zap.Any("error", err))
+	}
+}
+
+func (a *App) Run() error {
+	defer func() {
+		a.screen.Fini()
+	}()
+
+	a.draw()
+
+	for {
+		ev := a.screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch ev.Key() {
+			case tcell.KeyCtrlC:
+				a.screen.Fini()
+				os.Exit(0)
+			}
+			a.editor.HandleEventKey(ev)
+		case *tcell.EventResize:
+			a.screen.Sync()
+		}
+		a.draw()
+	}
+}
+
+func (a *App) draw() {
+	a.screen.Clear()
+
+	screenWidth, screenHeight := a.screen.Size()
+
+	// We make sure the editor is aware of it's visibility
+	a.editor.Height = screenHeight - 1 // leave space for status bar
+	a.editor.Width = screenWidth
+
+	for y := 0; y < a.editor.Height; y++ {
+		lineIndex := a.editor.ScrollOffsetY + y
+		if lineIndex >= len(a.editor.Lines) {
+			break
+		}
+
+		line := a.editor.Lines[lineIndex]
+		for x, ch := range line {
+			a.screen.SetContent(x, y, ch, nil, tcell.StyleDefault)
+		}
+	}
+
+	a.screen.ShowCursor(a.editor.CursorX, a.editor.CursorY-a.editor.ScrollOffsetY)
+	a.screen.Show()
+}
+
+func main() {
+	app := NewApp()
+	app.Init()
+	err := app.Run()
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 func setupLogger(logFile string) (*zap.Logger, error) {
