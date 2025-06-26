@@ -38,6 +38,7 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 		return
 	}
 
+	// General navigation that should work on all modes.
 	switch ek.Key() {
 	case tcell.KeyLeft:
 		e.MoveCursor(-1, 0)
@@ -78,6 +79,8 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 			e.StatusBar.StatusMode = false
 			e.StatusBar.Command = "/"
 			e.StatusBar.CursorX++
+
+		// Insert mode commands
 		case 'i':
 			e.setInsertMode(true)
 		case 'I':
@@ -96,6 +99,8 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 		case 'A':
 			e.setInsertMode(true)
 			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
+
+		// navigation commands
 		case '0':
 			e.SetCursor(0, e.CursorY)
 		case '$':
@@ -180,7 +185,7 @@ func (e *Editor) Draw() {
 	screenWidth, screenHeight := e.screen.Size()
 
 	// We make sure the editor is aware of it's visibility
-	e.Height = screenHeight - 1 // leave space for status bar
+	e.Height = screenHeight - 2 // leave space for status bar
 	e.Width = screenWidth
 
 	for y := 0; y < e.Height; y++ {
