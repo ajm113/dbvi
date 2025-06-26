@@ -56,6 +56,16 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 	}
 }
 
+func (e *Editor) setInsertMode(insertMode bool) {
+	e.InsertMode = insertMode
+
+	if e.InsertMode {
+		e.StatusBar.Command = "-- INSERT --"
+	} else {
+		e.StatusBar.Command = ""
+	}
+}
+
 func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 	switch ek.Key() {
 	case tcell.KeyRune:
@@ -69,10 +79,23 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 			e.StatusBar.Command = "/"
 			e.StatusBar.CursorX++
 		case 'i':
-			e.InsertMode = true
+			e.setInsertMode(true)
+		case 'I':
+			e.setInsertMode(true)
+			e.SetCursor(0, e.CursorY)
+		case 'o':
+			e.setInsertMode(true)
+			e.Lines = append(e.Lines[:e.CursorY+1], append([]string{""}, e.Lines[e.CursorY+1:]...)...)
+			e.SetCursor(0, e.CursorY+1)
+		case 'O':
+			e.setInsertMode(true)
+			e.Lines = append(e.Lines[:e.CursorY], append([]string{""}, e.Lines[e.CursorY:]...)...)
+			e.SetCursor(0, e.CursorY)
 		case 'a':
-			e.InsertMode = true
-			e.MoveCursor(1, 0)
+			e.setInsertMode(true)
+		case 'A':
+			e.setInsertMode(true)
+			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
 		case '0':
 			e.SetCursor(0, e.CursorY)
 		case '$':
@@ -86,7 +109,7 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 func (e *Editor) handleEventKeyInsertMode(ek *tcell.EventKey) {
 	switch ek.Key() {
 	case tcell.KeyEscape:
-		e.InsertMode = false
+		e.setInsertMode(false)
 	case tcell.KeyEnter:
 		rest := e.Lines[e.CursorY][e.CursorX:]
 		e.Lines[e.CursorY] = e.Lines[e.CursorY][:e.CursorX]

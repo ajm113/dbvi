@@ -22,7 +22,7 @@ type StatusBar struct {
 
 func NewStatusBar(screen tcell.Screen, editor *Editor) *StatusBar {
 	return &StatusBar{
-		style:       tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorGray),
+		style:       tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack),
 		insertStyle: tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorGreen),
 		normalStyle: tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlue),
 		screen:      screen,
@@ -58,11 +58,7 @@ func (s *StatusBar) HandleEventKey(ek *tcell.EventKey) {
 }
 
 func (s *StatusBar) Draw() {
-	if s.StatusMode {
-		s.drawStatus()
-		return
-	}
-
+	s.drawStatus()
 	s.drawCommand()
 }
 
@@ -105,6 +101,6 @@ func (s *StatusBar) drawStatus() {
 			}
 		}
 
-		s.screen.SetContent(x, h-1, ch, nil, style)
+		s.screen.SetContent(x, h-2, ch, nil, style)
 	}
 }
