@@ -1,6 +1,10 @@
 package main
 
-import "github.com/gdamore/tcell"
+import (
+	"unicode"
+
+	"github.com/gdamore/tcell"
+)
 
 type Editor struct {
 	Lines         []string
@@ -38,12 +42,35 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 		return
 	}
 
+	moveByWord := ek.Modifiers()&tcell.ModCtrl != 0
+
 	// General navigation that should work on all modes.
 	switch ek.Key() {
 	case tcell.KeyLeft:
-		e.MoveCursor(-1, 0)
+		if moveByWord {
+			x := moveToPrevWord(e.Lines[e.CursorY], e.CursorX)
+
+			if x != e.CursorX {
+				e.SetCursor(x, e.CursorY)
+			} else if e.CursorY > 0 {
+				e.SetCursor(len(e.Lines[e.CursorY-1]), e.CursorY-1)
+			}
+		} else {
+			e.MoveCursor(-1, 0)
+		}
+
 	case tcell.KeyRight:
-		e.MoveCursor(1, 0)
+		if moveByWord {
+			x := moveToNextWord(e.Lines[e.CursorY], e.CursorX)
+
+			if x != e.CursorX {
+				e.SetCursor(x, e.CursorY)
+			} else if e.CursorY+1 < len(e.Lines) {
+				e.SetCursor(len(e.Lines[e.CursorY+1]), e.CursorY+1)
+			}
+		} else {
+			e.MoveCursor(1, 0)
+		}
 	case tcell.KeyUp:
 		e.MoveCursor(0, -1)
 	case tcell.KeyDown:
@@ -201,4 +228,37 @@ func (e *Editor) Draw() {
 	}
 
 	e.StatusBar.Draw()
+}
+
+func isWordChar(ch rune) bool {
+	return unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '_'
+}
+
+func moveToNextWord(s string, pos int) int {
+	runes := []rune(s)
+	n := len(runes)
+
+	for pos < n && isWordChar(runes[pos]) {
+		pos++
+	}
+
+	for pos < n && !isWordChar(runes[pos]) {
+		pos++
+	}
+
+	return pos
+}
+
+func moveToPrevWord(s string, pos int) int {
+	runes := []rune(s)
+
+	for pos > 0 && isWordChar(runes[pos-1]) {
+		pos--
+	}
+
+	for pos > 0 && !isWordChar(runes[pos-1]) {
+		pos--
+	}
+
+	return pos
 }
