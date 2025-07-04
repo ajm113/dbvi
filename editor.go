@@ -20,6 +20,8 @@ type Editor struct {
 	Lines         []string
 	CursorX       int
 	CursorY       int
+	CursorStartX  int
+	CursorStartY  int
 	ScrollOffsetY int
 	ScrollOffsetX int
 	EditorMode    EditorMode
@@ -27,17 +29,22 @@ type Editor struct {
 	Height        int
 	StatusBar     *StatusBar
 
-	screen tcell.Screen
+	screen        tcell.Screen
+	normalStyle   tcell.Style
+	selectedStyle tcell.Style
+	executedStyle tcell.Style
 }
 
 func NewEditor(screen tcell.Screen) *Editor {
 
 	editor := &Editor{
-		Lines:      []string{""},
-		CursorX:    0,
-		CursorY:    0,
-		EditorMode: NormalMode,
-		screen:     screen,
+		Lines:         []string{""},
+		CursorX:       0,
+		CursorY:       0,
+		EditorMode:    NormalMode,
+		screen:        screen,
+		normalStyle:   tcell.StyleDefault,
+		selectedStyle: tcell.StyleDefault.Foreground(tcell.ColorGrey).Background(tcell.ColorWhite),
 	}
 
 	editor.StatusBar = NewStatusBar(screen, editor)
@@ -55,6 +62,8 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 
 	// General navigation that should work on all modes.
 	switch ek.Key() {
+	case tcell.KeyEscape:
+		e.SetEditorMode(NormalMode)
 	case tcell.KeyLeft:
 		if moveByWord {
 			x := moveToPrevWord(e.Lines[e.CursorY], e.CursorX)
@@ -140,6 +149,15 @@ func (e *Editor) handleEventKeyNormalMode(ek *tcell.EventKey) {
 		case 'A':
 			e.SetEditorMode(InsertMode)
 			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
+		case 'V':
+			e.SetEditorMode(VisualMode)
+			e.CursorStartX = 0
+			e.CursorStartY = e.CursorY
+			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
+		case 'v':
+			e.SetEditorMode(VisualMode)
+			e.CursorStartX = e.CursorX
+			e.CursorStartY = e.CursorY
 
 		// navigation commands
 		case '0':
@@ -154,8 +172,6 @@ func (e *Editor) handleEventKeyNormalMode(ek *tcell.EventKey) {
 
 func (e *Editor) handleEventKeyInsertMode(ek *tcell.EventKey) {
 	switch ek.Key() {
-	case tcell.KeyEscape:
-		e.SetEditorMode(NormalMode)
 	case tcell.KeyEnter:
 		rest := e.Lines[e.CursorY][e.CursorX:]
 		e.Lines[e.CursorY] = e.Lines[e.CursorY][:e.CursorX]
@@ -237,11 +253,54 @@ func (e *Editor) Draw() {
 
 		line := e.Lines[lineIndex]
 		for x, ch := range line {
-			e.screen.SetContent(x, y, ch, nil, tcell.StyleDefault)
+
+			style := e.normalStyle
+
+			if e.isSelected(x, y) {
+				style = e.selectedStyle
+			}
+
+			e.screen.SetContent(x, y, ch, nil, style)
 		}
 	}
 
 	e.StatusBar.Draw()
+}
+
+func (e *Editor) isSelected(x, y int) bool {
+	if e.EditorMode != VisualMode {
+		return false
+	}
+
+	startX := e.CursorStartX
+	startY := e.CursorStartY
+
+	endX := e.CursorX
+	endY := e.CursorY
+
+	// If for some reason these are the wrong way, flip em.
+	if y < startY || (y == startY && x < startX) {
+		startX, endX = endX, startX
+		startY, endY = endY, startY
+	}
+
+	if y < startY || y > endY {
+		return false
+	}
+
+	if y == startY && y == endY {
+		return x >= startX && x <= endX
+	}
+
+	if y == startY {
+		return x >= startX
+	}
+
+	if y == endY {
+		return x <= endX
+	}
+
+	return true
 }
 
 func isWordChar(ch rune) bool {
