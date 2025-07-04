@@ -6,13 +6,23 @@ import (
 	"github.com/gdamore/tcell"
 )
 
+type EditorMode int
+
+const (
+	NormalMode EditorMode = iota
+	InsertMode
+	VisualMode
+	CommandMode
+	ExecuteMode
+)
+
 type Editor struct {
 	Lines         []string
 	CursorX       int
 	CursorY       int
 	ScrollOffsetY int
 	ScrollOffsetX int
-	InsertMode    bool
+	EditorMode    EditorMode
 	Width         int
 	Height        int
 	StatusBar     *StatusBar
@@ -26,7 +36,7 @@ func NewEditor(screen tcell.Screen) *Editor {
 		Lines:      []string{""},
 		CursorX:    0,
 		CursorY:    0,
-		InsertMode: false,
+		EditorMode: NormalMode,
 		screen:     screen,
 	}
 
@@ -36,8 +46,7 @@ func NewEditor(screen tcell.Screen) *Editor {
 }
 
 func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
-
-	if !e.StatusBar.StatusMode {
+	if e.EditorMode == CommandMode {
 		e.StatusBar.HandleEventKey(ek)
 		return
 	}
@@ -77,54 +86,59 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 		e.MoveCursor(0, 1)
 	}
 
-	if e.InsertMode {
+	if e.EditorMode == InsertMode {
 		e.handleEventKeyInsertMode(ek)
 	} else {
-		e.handleEventKeyViewMode(ek)
+		e.handleEventKeyNormalMode(ek)
 	}
 }
 
-func (e *Editor) setInsertMode(insertMode bool) {
-	e.InsertMode = insertMode
+func (e *Editor) SetEditorMode(editorMode EditorMode) {
+	e.EditorMode = editorMode
 
-	if e.InsertMode {
+	switch e.EditorMode {
+	case InsertMode:
 		e.StatusBar.Command = "-- INSERT --"
-	} else {
+	case VisualMode:
+		e.StatusBar.Command = "-- VISUAL --"
+	case ExecuteMode:
+		e.StatusBar.Command = "-- EXECUTE --"
+	default:
 		e.StatusBar.Command = ""
 	}
 }
 
-func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
+func (e *Editor) handleEventKeyNormalMode(ek *tcell.EventKey) {
 	switch ek.Key() {
 	case tcell.KeyRune:
 		switch ek.Rune() {
 		case ':':
-			e.StatusBar.StatusMode = false
+			e.SetEditorMode(CommandMode)
 			e.StatusBar.Command = ":"
 			e.StatusBar.CursorX++
 		case '/':
-			e.StatusBar.StatusMode = false
+			e.SetEditorMode(CommandMode)
 			e.StatusBar.Command = "/"
 			e.StatusBar.CursorX++
 
 		// Insert mode commands
 		case 'i':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 		case 'I':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 			e.SetCursor(0, e.CursorY)
 		case 'o':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 			e.Lines = append(e.Lines[:e.CursorY+1], append([]string{""}, e.Lines[e.CursorY+1:]...)...)
 			e.SetCursor(0, e.CursorY+1)
 		case 'O':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 			e.Lines = append(e.Lines[:e.CursorY], append([]string{""}, e.Lines[e.CursorY:]...)...)
 			e.SetCursor(0, e.CursorY)
 		case 'a':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 		case 'A':
-			e.setInsertMode(true)
+			e.SetEditorMode(InsertMode)
 			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
 
 		// navigation commands
@@ -141,7 +155,7 @@ func (e *Editor) handleEventKeyViewMode(ek *tcell.EventKey) {
 func (e *Editor) handleEventKeyInsertMode(ek *tcell.EventKey) {
 	switch ek.Key() {
 	case tcell.KeyEscape:
-		e.setInsertMode(false)
+		e.SetEditorMode(NormalMode)
 	case tcell.KeyEnter:
 		rest := e.Lines[e.CursorY][e.CursorX:]
 		e.Lines[e.CursorY] = e.Lines[e.CursorY][:e.CursorX]

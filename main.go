@@ -90,8 +90,8 @@ func (a *App) draw() {
 	a.screen.Clear()
 	a.editor.Draw()
 
-	if !a.editor.StatusBar.StatusMode {
-		a.screen.ShowCursor(a.editor.StatusBar.CursorX, a.editor.Height)
+	if a.editor.EditorMode == CommandMode {
+		a.screen.ShowCursor(a.editor.StatusBar.CursorX, a.editor.Height+1)
 	} else {
 		a.screen.ShowCursor(a.editor.CursorX, a.editor.CursorY-a.editor.ScrollOffsetY)
 	}

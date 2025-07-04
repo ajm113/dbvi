@@ -13,9 +13,8 @@ type StatusBar struct {
 
 	screen tcell.Screen
 
-	StatusMode bool
-	Command    string
-	CursorX    int
+	Command string
+	CursorX int
 
 	editor *Editor
 }
@@ -27,22 +26,21 @@ func NewStatusBar(screen tcell.Screen, editor *Editor) *StatusBar {
 		normalStyle: tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlue),
 		screen:      screen,
 		editor:      editor,
-		StatusMode:  true,
 	}
 }
 
 func (s *StatusBar) HandleEventKey(ek *tcell.EventKey) {
-	if s.StatusMode {
+	if s.editor.EditorMode != CommandMode {
 		return
 	}
 
 	switch ek.Key() {
 	case tcell.KeyEscape:
-		s.StatusMode = true
+		s.editor.SetEditorMode(NormalMode)
 		s.Command = ""
 		s.CursorX = 0
 	case tcell.KeyEnter:
-		s.StatusMode = true
+		s.editor.SetEditorMode(NormalMode)
 		s.Command = ""
 		s.CursorX = 0
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
@@ -78,10 +76,19 @@ func (s *StatusBar) drawCommand() {
 func (s *StatusBar) drawStatus() {
 	w, h := s.screen.Size() // Get width and height
 
-	mode := "  NORMAL  "
-	if s.editor.InsertMode {
-		mode = "  INSERT  "
+	mode := "UNKOWN"
+	switch s.editor.EditorMode {
+	case NormalMode:
+		mode = "NORMAL"
+	case InsertMode:
+		mode = "INSERT"
+	case VisualMode:
+		mode = "VI-LINE"
+	case CommandMode:
+		mode = "COMMAND"
 	}
+
+	mode = fmt.Sprintf("  %s  ", mode)
 
 	status := fmt.Sprintf("%s %s %d/%d:%d", mode, "[No Name]", s.editor.CursorY+1, len(s.editor.Lines), s.editor.CursorX+1)
 	for x := 0; x < w; x++ {
@@ -92,13 +99,11 @@ func (s *StatusBar) drawStatus() {
 
 		style := s.style
 
-		if s.StatusMode {
-			if x < len(mode) && s.editor.InsertMode {
-				style = s.insertStyle
-			}
-			if x < len(mode) && !s.editor.InsertMode {
-				style = s.normalStyle
-			}
+		if x < len(mode) && s.editor.EditorMode == InsertMode {
+			style = s.insertStyle
+		}
+		if x < len(mode) && s.editor.EditorMode != InsertMode {
+			style = s.normalStyle
 		}
 
 		s.screen.SetContent(x, h-2, ch, nil, style)
