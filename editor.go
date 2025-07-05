@@ -1,8 +1,11 @@
 package main
 
 import (
-	"unicode"
+	"context"
+	"fmt"
+	"strings"
 
+	"github.com/ajm113/dbvi/utils"
 	"github.com/gdamore/tcell"
 )
 
@@ -12,27 +15,31 @@ const (
 	NormalMode EditorMode = iota
 	InsertMode
 	VisualMode
+	VisualLineMode
 	CommandMode
 	ExecuteMode
 )
 
 type Editor struct {
-	Lines         []string
-	CursorX       int
-	CursorY       int
-	CursorStartX  int
-	CursorStartY  int
-	ScrollOffsetY int
-	ScrollOffsetX int
-	EditorMode    EditorMode
-	Width         int
-	Height        int
-	StatusBar     *StatusBar
+	Lines              []string
+	Clipboard          []string
+	ClipboardMultiline bool
+	CursorX            int
+	CursorY            int
+	CursorStartX       int
+	CursorStartY       int
+	ScrollOffsetY      int
+	ScrollOffsetX      int
+	EditorMode         EditorMode
+	Width              int
+	Height             int
+	StatusBar          *StatusBar
 
 	screen        tcell.Screen
 	normalStyle   tcell.Style
 	selectedStyle tcell.Style
 	executedStyle tcell.Style
+	bufferedKeys  string
 }
 
 func NewEditor(screen tcell.Screen) *Editor {
@@ -48,6 +55,7 @@ func NewEditor(screen tcell.Screen) *Editor {
 	}
 
 	editor.StatusBar = NewStatusBar(screen, editor)
+	setDefaultHotkeys(editor)
 
 	return editor
 }
@@ -62,11 +70,23 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 
 	// General navigation that should work on all modes.
 	switch ek.Key() {
+	case ':':
+		if e.EditorMode != InsertMode && e.EditorMode != CommandMode {
+			e.SetEditorMode(CommandMode)
+			e.StatusBar.Command = ":"
+			e.StatusBar.CursorX++
+		}
+	case '/':
+		if e.EditorMode != InsertMode && e.EditorMode != CommandMode {
+			e.SetEditorMode(CommandMode)
+			e.StatusBar.Command = "/"
+			e.StatusBar.CursorX++
+		}
 	case tcell.KeyEscape:
 		e.SetEditorMode(NormalMode)
 	case tcell.KeyLeft:
 		if moveByWord {
-			x := moveToPrevWord(e.Lines[e.CursorY], e.CursorX)
+			x := utils.MoveToPrevWord(e.Lines[e.CursorY], e.CursorX)
 
 			if x != e.CursorX {
 				e.SetCursor(x, e.CursorY)
@@ -79,7 +99,7 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 
 	case tcell.KeyRight:
 		if moveByWord {
-			x := moveToNextWord(e.Lines[e.CursorY], e.CursorX)
+			x := utils.MoveToNextWord(e.Lines[e.CursorY], e.CursorX)
 
 			if x != e.CursorX {
 				e.SetCursor(x, e.CursorY)
@@ -90,26 +110,39 @@ func (e *Editor) HandleEventKey(ek *tcell.EventKey) {
 			e.MoveCursor(1, 0)
 		}
 	case tcell.KeyUp:
-		e.MoveCursor(0, -1)
+
+		if e.EditorMode != VisualLineMode {
+			e.MoveCursor(0, -1)
+		} else {
+			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY-1)
+		}
 	case tcell.KeyDown:
-		e.MoveCursor(0, 1)
+		if e.EditorMode != VisualLineMode {
+			e.MoveCursor(0, 1)
+		} else {
+			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY+1)
+		}
 	}
 
-	if e.EditorMode == InsertMode {
+	switch e.EditorMode {
+	case InsertMode:
 		e.handleEventKeyInsertMode(ek)
-	} else {
-		e.handleEventKeyNormalMode(ek)
 	}
+
+	e.handleHotkeys(ek)
 }
 
 func (e *Editor) SetEditorMode(editorMode EditorMode) {
 	e.EditorMode = editorMode
+	e.bufferedKeys = ""
 
 	switch e.EditorMode {
 	case InsertMode:
 		e.StatusBar.Command = "-- INSERT --"
 	case VisualMode:
 		e.StatusBar.Command = "-- VISUAL --"
+	case VisualLineMode:
+		e.StatusBar.Command = "-- VISUAL LINE --"
 	case ExecuteMode:
 		e.StatusBar.Command = "-- EXECUTE --"
 	default:
@@ -117,56 +150,30 @@ func (e *Editor) SetEditorMode(editorMode EditorMode) {
 	}
 }
 
-func (e *Editor) handleEventKeyNormalMode(ek *tcell.EventKey) {
-	switch ek.Key() {
-	case tcell.KeyRune:
-		switch ek.Rune() {
-		case ':':
-			e.SetEditorMode(CommandMode)
-			e.StatusBar.Command = ":"
-			e.StatusBar.CursorX++
-		case '/':
-			e.SetEditorMode(CommandMode)
-			e.StatusBar.Command = "/"
-			e.StatusBar.CursorX++
+func (e *Editor) handleHotkeys(ek *tcell.EventKey) {
+	if e.EditorMode == InsertMode {
+		return
+	}
 
-		// Insert mode commands
-		case 'i':
-			e.SetEditorMode(InsertMode)
-		case 'I':
-			e.SetEditorMode(InsertMode)
-			e.SetCursor(0, e.CursorY)
-		case 'o':
-			e.SetEditorMode(InsertMode)
-			e.Lines = append(e.Lines[:e.CursorY+1], append([]string{""}, e.Lines[e.CursorY+1:]...)...)
-			e.SetCursor(0, e.CursorY+1)
-		case 'O':
-			e.SetEditorMode(InsertMode)
-			e.Lines = append(e.Lines[:e.CursorY], append([]string{""}, e.Lines[e.CursorY:]...)...)
-			e.SetCursor(0, e.CursorY)
-		case 'a':
-			e.SetEditorMode(InsertMode)
-		case 'A':
-			e.SetEditorMode(InsertMode)
-			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
-		case 'V':
-			e.SetEditorMode(VisualMode)
-			e.CursorStartX = 0
-			e.CursorStartY = e.CursorY
-			e.SetCursor(len(e.Lines[e.CursorY]), e.CursorY)
-		case 'v':
-			e.SetEditorMode(VisualMode)
-			e.CursorStartX = e.CursorX
-			e.CursorStartY = e.CursorY
+	e.bufferedKeys += eventKeyToString(ek)
+	if cmd, ok := HotkeyCommandRegistry[e.bufferedKeys]; ok {
 
-		// navigation commands
-		case '0':
-			e.SetCursor(0, e.CursorY)
-		case '$':
-			e.SetCursor(len(e.Lines[e.CursorY])-1, e.CursorY)
-		case 'G':
-			e.SetCursor(0, len(e.Lines)-1)
+		if len(cmd.EditorModes) == 0 {
+			cmd.Handler(context.Background(), e)
+		} else {
+			for _, m := range cmd.EditorModes {
+				if m == e.EditorMode {
+					cmd.Handler(context.Background(), e)
+					break
+				}
+			}
 		}
+		e.bufferedKeys = ""
+	}
+
+	// TOOD: This is prone to bugs and should be updated to actually count # of key presses in the string...
+	if len(strings.Split(e.bufferedKeys, "+")) > 1 || len(e.bufferedKeys) > 1 {
+		e.bufferedKeys = ""
 	}
 }
 
@@ -268,7 +275,7 @@ func (e *Editor) Draw() {
 }
 
 func (e *Editor) isSelected(x, y int) bool {
-	if e.EditorMode != VisualMode {
+	if e.EditorMode != VisualMode && e.EditorMode != VisualLineMode {
 		return false
 	}
 
@@ -303,35 +310,54 @@ func (e *Editor) isSelected(x, y int) bool {
 	return true
 }
 
-func isWordChar(ch rune) bool {
-	return unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '_'
-}
+func eventKeyToString(ev *tcell.EventKey) string {
+	mod := ev.Modifiers()
+	var prefix string
 
-func moveToNextWord(s string, pos int) int {
-	runes := []rune(s)
-	n := len(runes)
-
-	for pos < n && isWordChar(runes[pos]) {
-		pos++
+	if mod&tcell.ModCtrl != 0 {
+		prefix += "Ctrl+"
+	}
+	if mod&tcell.ModAlt != 0 {
+		prefix += "Alt+"
+	}
+	if mod&tcell.ModShift != 0 {
+		prefix += "Shift+"
 	}
 
-	for pos < n && !isWordChar(runes[pos]) {
-		pos++
+	switch ev.Key() {
+	case tcell.KeyRune:
+		return prefix + string(ev.Rune())
+	case tcell.KeyEsc:
+		return prefix + "Esc"
+	case tcell.KeyEnter:
+		return prefix + "Enter"
+	case tcell.KeyTab:
+		return prefix + "Tab"
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		return prefix + "Backspace"
+	case tcell.KeyUp:
+		return prefix + "Up"
+	case tcell.KeyDown:
+		return prefix + "Down"
+	case tcell.KeyLeft:
+		return prefix + "Left"
+	case tcell.KeyRight:
+		return prefix + "Right"
+	case tcell.KeyHome:
+		return prefix + "Home"
+	case tcell.KeyEnd:
+		return prefix + "End"
+	case tcell.KeyDelete:
+		return prefix + "Delete"
+	case tcell.KeyInsert:
+		return prefix + "Insert"
+	case tcell.KeyPgUp:
+		return prefix + "PageUp"
+	case tcell.KeyPgDn:
+		return prefix + "PageDown"
+	case tcell.KeyCtrlSpace:
+		return "Ctrl+Space"
+	default:
+		return fmt.Sprintf("%s[%v]", prefix, ev.Key())
 	}
-
-	return pos
-}
-
-func moveToPrevWord(s string, pos int) int {
-	runes := []rune(s)
-
-	for pos > 0 && isWordChar(runes[pos-1]) {
-		pos--
-	}
-
-	for pos > 0 && !isWordChar(runes[pos-1]) {
-		pos--
-	}
-
-	return pos
 }

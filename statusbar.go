@@ -83,7 +83,9 @@ func (s *StatusBar) drawStatus() {
 	case InsertMode:
 		mode = "INSERT"
 	case VisualMode:
-		mode = "VI-LINE"
+		mode = "VISUAL"
+	case VisualLineMode:
+		mode = "V-LINE"
 	case CommandMode:
 		mode = "COMMAND"
 	}
